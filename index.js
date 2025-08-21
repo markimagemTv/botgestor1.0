@@ -53,4 +53,37 @@ bot.onText(/\/start/, (msg) => {
 bot.onText(/\/agendar (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const [numero, horario, ...mensagemParts] = match[1].split(' ');
-  const mensagem = mensagemParts
+  const mensagem = mensagemParts.join(' ');
+
+  bot.sendMessage(chatId, `Mensagem agendada para ${numero} às ${horario}: "${mensagem}"`);
+
+  setTimeout(async () => {
+    if (whatsappSock) {
+      await whatsappSock.sendMessage(numero + '@s.whatsapp.net', { text: mensagem });
+      bot.sendMessage(chatId, `Mensagem enviada para ${numero} via WhatsApp!`);
+    } else {
+      bot.sendMessage(chatId, `WhatsApp não está conectado!`);
+    }
+  }, calcularTimeout(horario));
+});
+
+function calcularTimeout(horario) {
+  return 10000; // ajuste para o seu formato
+}
+
+// Tratamento para erro de polling do Telegram
+bot.on('polling_error', (err) => {
+  if (err.code === 'ETELEGRAM' && err.message.includes('409 Conflict')) {
+    console.error('Erro de polling do Telegram: Só pode rodar UMA instância do bot. Pare qualquer outro serviço/container/bot usando esse token!');
+    // Opcional: envie instrução ao admin, se configurado
+    if (process.env.TELEGRAM_ADMIN_ID) {
+      bot.sendMessage(
+        process.env.TELEGRAM_ADMIN_ID,
+        'Erro: Só pode rodar UMA instância do bot Telegram com esse token! Pare outros bots que estejam rodando.'
+      );
+    }
+    process.exit(1);
+  } else {
+    console.error('Polling error:', err);
+  }
+});
