@@ -1,7 +1,7 @@
 const { makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
-const QRCode = require('qrcode'); // ADICIONE ESTA LINHA
+const QRCode = require('qrcode');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'SEU_TOKEN_DO_TELEGRAM';
 
@@ -16,14 +16,14 @@ async function iniciarWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     const sock = makeWASocket({ 
       auth: state,
-      printQRInTerminal: true // Opcional: mostra QR no terminal também
+      printQRInTerminal: true
     });
 
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async (update) => {
       if (update.qr) {
-        lastQrCode = update.qr; // Salva o QR para envio pelo Telegram
+        lastQrCode = update.qr;
       }
       if (update.connection === 'close') {
         console.log('WhatsApp desconectado. Apagando credenciais e aguardando novo login...');
@@ -49,25 +49,81 @@ async function iniciarWhatsApp() {
   }
 }
 
+// Inicializa WhatsApp assim que possível
 iniciarWhatsApp().then(sock => {
   whatsappSock = sock;
 });
 
-// Comando /start
+// Teclado persistente com botão para QR Code
+const teclado = {
+  reply_markup: {
+    keyboard: [
+      [{ text: 'Gerar QR WhatsApp' }]
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: false
+  }
+};
+
+// Comando /start exibe teclado persistente
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, 'Bot iniciado! Envie comandos ou mensagens.');
+  bot.sendMessage(msg.chat.id, 'Bot iniciado! Use o botão abaixo para gerar o QR Code WhatsApp.', teclado);
 });
 
-// Comando para mostrar o QR Code do WhatsApp
-bot.onText(/\/qrcode/, async (msg) => {
-  const chatId = msg.chat.id;
-  if (lastQrCode) {
-    // Gera imagem do QR code e envia
-    const qrBuffer = await QRCode.toBuffer(lastQrCode);
-    bot.sendPhoto(chatId, qrBuffer, { caption: 'Escaneie este QR Code com seu WhatsApp!' });
-  } else {
-    bot.sendMessage(chatId, 'Nenhum QR Code disponível no momento. O WhatsApp já pode estar conectado ou em processo de conexão.');
+// Botão "Gerar QR WhatsApp"
+bot.on('message', async (msg) => {
+  if (msg.text === 'Gerar QR WhatsApp') {
+    if (lastQrCode) {
+      try {
+        const qrBuffer = await QRCode.toBuffer(lastQrCode);
+        bot.sendPhoto(msg.chat.id, qrBuffer, { caption: 'Escaneie este QR Code com seu WhatsApp!' });
+      } catch (e) {
+        bot.sendMessage(msg.chat.id, 'Erro ao gerar imagem do QR Code.');
+      }
+    } else {
+      bot.sendMessage(msg.chat.id, 'Nenhum QR Code disponível no momento. O WhatsApp já pode estar conectado ou em processo de conexão.');
+    }
   }
 });
 
-// ... (restante do código, inclusive agendamento e polling_error)
+// --- Exemplo de comandos extras ---
+
+// Trata comando /start (já incluso acima)
+// Comando de agendamento exemplo (pode adaptar para contatos, etc.)
+bot.onText(/\/agendar (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const [numero, horario, ...mensagemParts] = match[1].split(' ');
+  const mensagem = mensagemParts.join(' ');
+
+  bot.sendMessage(chatId, `Mensagem agendada para ${numero} às ${horario}: "${mensagem}"`);
+
+  setTimeout(async () => {
+    if (whatsappSock) {
+      await whatsappSock.sendMessage(numero + '@s.whatsapp.net', { text: mensagem });
+      bot.sendMessage(chatId, `Mensagem enviada para ${numero} via WhatsApp!`);
+    } else {
+      bot.sendMessage(chatId, `WhatsApp não está conectado!`);
+    }
+  }, calcularTimeout(horario));
+});
+
+function calcularTimeout(horario) {
+  return 10000; // ajuste para o seu formato
+}
+
+// Tratamento para erro de polling do Telegram
+bot.on('polling_error', (err) => {
+  if (err.code === 'ETELEGRAM' && err.message.includes('409 Conflict')) {
+    console.error('Erro de polling do Telegram: Só pode rodar UMA instância do bot. Pare qualquer outro serviço/container/bot usando esse token!');
+    // Opcional: envie instrução ao admin, se configurado
+    if (process.env.TELEGRAM_ADMIN_ID) {
+      bot.sendMessage(
+        process.env.TELEGRAM_ADMIN_ID,
+        'Erro: Só pode rodar UMA instância do bot Telegram com esse token! Pare outros bots que estejam rodando.'
+      );
+    }
+    process.exit(1);
+  } else {
+    console.error('Polling error:', err);
+  }
+});
