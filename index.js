@@ -10,7 +10,18 @@ const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 let whatsappSock;
 let lastQrCode = null;
 
-// Função para iniciar o WhatsApp
+// Teclado persistente com botão para QR Code
+const teclado = {
+  reply_markup: {
+    keyboard: [
+      [{ text: 'Gerar QR WhatsApp' }]
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: false
+  }
+};
+
+// Inicia WhatsApp e gerencia QR code
 async function iniciarWhatsApp() {
   try {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
@@ -36,6 +47,12 @@ async function iniciarWhatsApp() {
       }
     });
 
+    sock.ev.on('connection.update', (update) => {
+      if (update.connection === 'open') {
+        console.log('WhatsApp conectado!');
+      }
+    });
+
     return sock;
   } catch (err) {
     console.error('Erro ao conectar ao WhatsApp:', err);
@@ -49,23 +66,11 @@ async function iniciarWhatsApp() {
   }
 }
 
-// Inicializa WhatsApp assim que possível
 iniciarWhatsApp().then(sock => {
   whatsappSock = sock;
 });
 
-// Teclado persistente com botão para QR Code
-const teclado = {
-  reply_markup: {
-    keyboard: [
-      [{ text: 'Gerar QR WhatsApp' }]
-    ],
-    resize_keyboard: true,
-    one_time_keyboard: false
-  }
-};
-
-// Comando /start exibe teclado persistente
+// Mostra teclado persistente ao iniciar
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id, 'Bot iniciado! Use o botão abaixo para gerar o QR Code WhatsApp.', teclado);
 });
@@ -76,7 +81,7 @@ bot.on('message', async (msg) => {
     if (lastQrCode) {
       try {
         const qrBuffer = await QRCode.toBuffer(lastQrCode);
-        bot.sendPhoto(msg.chat.id, qrBuffer, { caption: 'Escaneie este QR Code com seu WhatsApp!' });
+        await bot.sendPhoto(msg.chat.id, qrBuffer, { caption: 'Escaneie este QR Code com seu WhatsApp!' });
       } catch (e) {
         bot.sendMessage(msg.chat.id, 'Erro ao gerar imagem do QR Code.');
       }
@@ -86,10 +91,7 @@ bot.on('message', async (msg) => {
   }
 });
 
-// --- Exemplo de comandos extras ---
-
-// Trata comando /start (já incluso acima)
-// Comando de agendamento exemplo (pode adaptar para contatos, etc.)
+// Exemplo de agendamento simples (você pode adaptar)
 bot.onText(/\/agendar (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const [numero, horario, ...mensagemParts] = match[1].split(' ');
@@ -107,15 +109,15 @@ bot.onText(/\/agendar (.+)/, async (msg, match) => {
   }, calcularTimeout(horario));
 });
 
+// Função simples para timeout (ajuste para sua lógica de horário)
 function calcularTimeout(horario) {
-  return 10000; // ajuste para o seu formato
+  return 10000; // 10 segundos para teste
 }
 
 // Tratamento para erro de polling do Telegram
 bot.on('polling_error', (err) => {
   if (err.code === 'ETELEGRAM' && err.message.includes('409 Conflict')) {
     console.error('Erro de polling do Telegram: Só pode rodar UMA instância do bot. Pare qualquer outro serviço/container/bot usando esse token!');
-    // Opcional: envie instrução ao admin, se configurado
     if (process.env.TELEGRAM_ADMIN_ID) {
       bot.sendMessage(
         process.env.TELEGRAM_ADMIN_ID,
