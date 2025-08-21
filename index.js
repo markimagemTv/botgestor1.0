@@ -3,9 +3,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const QRCode = require('qrcode');
 
+// Insira o token do seu bot Telegram e seu chat id aqui:
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'SEU_TOKEN_DO_TELEGRAM';
-// Defina seu chat ID aqui (o ID do Telegram que vai receber o QR automaticamente)
-// Para testar, envie qualquer mensagem ao bot e pegue o valor de msg.chat.id no log
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || 'SEU_CHAT_ID_AQUI';
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
@@ -135,5 +134,4 @@ bot.on('polling_error', (err) => {
   } else {
     console.error('Polling error:', err);
   }
-}
-);
+});
