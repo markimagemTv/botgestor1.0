@@ -4,13 +4,16 @@ const fs = require('fs');
 const QRCode = require('qrcode');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'SEU_TOKEN_DO_TELEGRAM';
+// Defina seu chat ID aqui (o ID do Telegram que vai receber o QR automaticamente)
+// Para testar, envie qualquer mensagem ao bot e pegue o valor de msg.chat.id no log
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || 'SEU_CHAT_ID_AQUI';
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 let whatsappSock;
 let lastQrCode = null;
 
-// Teclado persistente com botão para QR Code
+// Teclado persistente
 const teclado = {
   reply_markup: {
     keyboard: [
@@ -21,7 +24,7 @@ const teclado = {
   }
 };
 
-// Inicia WhatsApp e gerencia QR code
+// Inicia WhatsApp e envia QR para Telegram assim que gerar
 async function iniciarWhatsApp() {
   try {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
@@ -35,6 +38,13 @@ async function iniciarWhatsApp() {
     sock.ev.on('connection.update', async (update) => {
       if (update.qr) {
         lastQrCode = update.qr;
+        // ENVIA QR CODE DIRETO PARA O TELEGRAM ASSIM QUE GERAR!
+        try {
+          const qrBuffer = await QRCode.toBuffer(update.qr);
+          await bot.sendPhoto(TELEGRAM_CHAT_ID, qrBuffer, { caption: 'Escaneie este QR Code com seu WhatsApp!' });
+        } catch (e) {
+          bot.sendMessage(TELEGRAM_CHAT_ID, 'Erro ao gerar imagem do QR Code.');
+        }
       }
       if (update.connection === 'close') {
         console.log('WhatsApp desconectado. Apagando credenciais e aguardando novo login...');
@@ -45,9 +55,6 @@ async function iniciarWhatsApp() {
           console.error('Erro ao apagar pasta de autenticação:', err);
         }
       }
-    });
-
-    sock.ev.on('connection.update', (update) => {
       if (update.connection === 'open') {
         console.log('WhatsApp conectado!');
       }
@@ -75,7 +82,7 @@ bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id, 'Bot iniciado! Use o botão abaixo para gerar o QR Code WhatsApp.', teclado);
 });
 
-// Botão "Gerar QR WhatsApp"
+// Botão "Gerar QR WhatsApp" (funciona se QR ainda estiver disponível)
 bot.on('message', async (msg) => {
   if (msg.text === 'Gerar QR WhatsApp') {
     if (lastQrCode) {
@@ -91,7 +98,7 @@ bot.on('message', async (msg) => {
   }
 });
 
-// Exemplo de agendamento simples (você pode adaptar)
+// Função exemplo para agendamento
 bot.onText(/\/agendar (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const [numero, horario, ...mensagemParts] = match[1].split(' ');
@@ -128,4 +135,5 @@ bot.on('polling_error', (err) => {
   } else {
     console.error('Polling error:', err);
   }
-});
+}
+);
