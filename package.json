@@ -1,0 +1,1 @@
+{ "name": "botgestor1.0", "version": "1.0.0", "description": "Bot Telegram com agendamento de mensagens para WhatsApp usando Baileys", "main": "index.js", "scripts": { "start": "node index.js" }, "dependencies": { "@whiskeysockets/baileys": "^6.6.0", "node-telegram-bot-api": "^0.61.0" }}
